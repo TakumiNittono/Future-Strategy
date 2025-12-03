@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
-import { Send, Bot, User, LogIn, UserPlus, X, MessageSquare, Plus, Trash2, Menu, ChevronLeft, Paperclip } from 'lucide-react';
+import { Send, Bot, User, LogIn, UserPlus, X, MessageSquare, Plus, Trash2, Menu, ChevronLeft, Paperclip, File, ArrowUp, Mic } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface Message {
@@ -36,6 +36,7 @@ export default function ChatInterface() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showFileMenu, setShowFileMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   // localStorageから会話履歴を読み込む
   useEffect(() => {
@@ -663,14 +664,43 @@ export default function ChatInterface() {
         {/* 入力エリア */}
         <div className="sticky bottom-0 border-t border-gray-700/50 bg-[#2d2d3a]/80 backdrop-blur-sm px-4 py-5 shadow-2xl">
           <div className="mx-auto max-w-3xl">
+            {/* 選択されたファイルの表示 */}
+            {selectedFiles.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {selectedFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#40414f] border border-gray-600/50 text-sm text-gray-200"
+                  >
+                    <div className="flex-shrink-0 w-10 h-10 rounded bg-blue-500/20 flex items-center justify-center">
+                      <File className="h-5 w-5 text-blue-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-gray-200 font-medium truncate">{file.name}</div>
+                      <div className="text-xs text-gray-400">ドキュメント</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+                      }}
+                      className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-700/50 hover:bg-gray-600/50 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                      aria-label="ファイルを削除"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           <form onSubmit={handleSubmit} className="relative">
-            <div className="relative rounded-2xl border border-gray-600/50 bg-[#40414f] shadow-lg transition-all focus-within:border-[#10a37f]/50 focus-within:ring-2 focus-within:ring-[#10a37f]/20">
+            <div className="relative rounded-2xl border border-[#10a37f]/50 bg-[#40414f] shadow-lg transition-all">
               {/* プラスボタンとメニュー */}
-              <div className="absolute left-3 bottom-3 z-10">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
                 <button
                   type="button"
                   onClick={() => setShowFileMenu(!showFileMenu)}
-                  className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-600/50 transition-colors text-gray-400 hover:text-gray-300"
+                  className="flex items-center justify-center w-6 h-6 text-gray-300 hover:text-white transition-colors"
                   aria-label="ファイルを追加"
                 >
                   <Plus className="h-5 w-5" />
@@ -710,10 +740,13 @@ export default function ChatInterface() {
                   const files = e.target.files;
                   if (files && files.length > 0) {
                     // ファイル選択時の処理
-                    console.log('Selected files:', Array.from(files));
+                    const fileArray = Array.from(files);
+                    setSelectedFiles(prev => [...prev, ...fileArray]);
+                    console.log('Selected files:', fileArray);
                     // TODO: ファイルをアップロードする処理を実装
-                    alert(`${files.length}個のファイルが選択されました`);
                   }
+                  // 同じファイルを再度選択できるようにリセット
+                  e.target.value = '';
                 }}
               />
 
@@ -722,8 +755,8 @@ export default function ChatInterface() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="メッセージを入力..."
-                className="w-full resize-none rounded-2xl bg-transparent px-5 py-4 pl-12 pr-14 text-white placeholder-gray-400 focus:outline-none focus:ring-0"
+                placeholder="質問してみましょう"
+                className="w-full resize-none rounded-2xl bg-transparent px-4 pt-6 pb-4 pl-12 pr-20 text-white placeholder-gray-400 focus:outline-none focus:ring-0"
                 rows={1}
                 style={{
                   maxHeight: '200px',
@@ -731,35 +764,25 @@ export default function ChatInterface() {
                 }}
                 disabled={isLoading}
               />
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={clsx(
-                  'absolute bottom-3 right-3 rounded-xl p-2.5 transition-all duration-200 shadow-lg',
-                  input.trim() && !isLoading
-                    ? 'bg-gradient-to-br from-[#10a37f] to-[#0d8f6e] text-white hover:from-[#0d8f6e] hover:to-[#0a7d5c] hover:scale-105 active:scale-95'
-                    : 'bg-gray-600/50 text-gray-500 cursor-not-allowed'
-                )}
-              >
-                <Send className="h-5 w-5" />
-              </button>
+              {/* 送信ボタン */}
+              <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                <button
+                  type="submit"
+                  disabled={!input.trim() || isLoading}
+                  className={clsx(
+                    'flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200',
+                    input.trim() && !isLoading
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:scale-105 active:scale-95'
+                      : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                  )}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </form>
-          <p className="mt-3 text-center text-xs text-gray-500">
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded bg-gray-700/50 px-2 py-0.5 text-xs font-mono">Enter</kbd>
-              <span>改行</span>
-            </span>
-            <span className="mx-2">/</span>
-            <span className="inline-flex items-center gap-1">
-              <kbd className="rounded bg-gray-700/50 px-2 py-0.5 text-xs font-mono">
-                {isMac ? '⌘' : 'Ctrl'}+Enter
-              </kbd>
-              <span>送信</span>
-            </span>
-          </p>
-          </div>
         </div>
+      </div>
       </div>
 
       {/* 認証モーダル（グローバル） */}
