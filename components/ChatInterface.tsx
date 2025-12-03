@@ -393,9 +393,11 @@ export default function ChatInterface() {
   // メニューの外側をクリックしたら閉じる
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (showFileMenu && fileInputRef.current && !fileInputRef.current.contains(e.target as Node)) {
+      if (showFileMenu) {
         const target = e.target as HTMLElement;
-        if (!target.closest('[aria-label="ファイルを追加"]')) {
+        // プラスボタンやメニュー内の要素をクリックした場合は閉じない
+        if (!target.closest('[aria-label="ファイルを追加"]') && 
+            !target.closest('.absolute.bottom-full')) {
           setShowFileMenu(false);
         }
       }
@@ -679,9 +681,14 @@ export default function ChatInterface() {
                   <div className="absolute bottom-full left-0 mb-2 w-64 rounded-lg bg-[#2d2d3a] border border-gray-700/50 shadow-2xl overflow-hidden animate-fade-in">
                     <button
                       type="button"
-                      onClick={() => {
-                        fileInputRef.current?.click();
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         setShowFileMenu(false);
+                        // メニューを閉じてからファイル選択ダイアログを開く
+                        setTimeout(() => {
+                          fileInputRef.current?.click();
+                        }, 100);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors text-left text-gray-200"
                     >
