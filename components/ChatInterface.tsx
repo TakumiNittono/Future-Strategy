@@ -559,7 +559,7 @@ export default function ChatInterface() {
             </div>
             <div className="h-20 flex items-center border-l border-gray-600/50 pl-4">
               <h1 className="text-xl font-extrabold text-gray-100 tracking-widest uppercase" style={{ fontFamily: 'var(--font-outfit)', letterSpacing: '0.15em' }}>
-                NITTONO専用AIツール
+                NITTONO社専用未来戦略ツール(rag+外部サーチ)
               </h1>
             </div>
           </div>
