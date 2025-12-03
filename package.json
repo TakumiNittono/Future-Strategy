@@ -1,6 +1,7 @@
 {
-  "name": "my-dify-chat",
+  "name": "nittono-future-strategy-tool",
   "version": "0.1.0",
+  "description": "NITTONO社専用未来戦略ツール(rag+外部サーチ)",
   "private": true,
   "scripts": {
     "dev": "next dev",

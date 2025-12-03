@@ -1,4 +1,6 @@
-# Dify Chat Application
+# NITTONO専用AIツール
+
+NITTONO社専用未来戦略ツール(rag+外部サーチ)
 
 Dify APIを利用したChatGPT風のチャットボットUIアプリケーションです。
 
