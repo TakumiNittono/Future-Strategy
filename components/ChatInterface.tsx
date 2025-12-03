@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
-import { Send, Bot, User } from 'lucide-react';
+import { Send, Bot, User, LogIn, UserPlus, X, MessageSquare, Plus, Trash2, Menu, ChevronLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface Message {
@@ -12,7 +12,17 @@ interface Message {
   content: string;
 }
 
+interface Conversation {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export default function ChatInterface() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,6 +31,79 @@ export default function ChatInterface() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingContent, setStreamingContent] = useState('');
   const [isMac, setIsMac] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // localStorageから会話履歴を読み込む
+  useEffect(() => {
+    const saved = localStorage.getItem('chat-conversations');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setConversations(parsed);
+      } catch (e) {
+        console.error('Failed to load conversations:', e);
+      }
+    }
+  }, []);
+
+  // 会話履歴をlocalStorageに保存
+  useEffect(() => {
+    if (conversations.length > 0) {
+      localStorage.setItem('chat-conversations', JSON.stringify(conversations));
+    }
+  }, [conversations]);
+
+  // 現在の会話を取得
+  const currentConversation = conversations.find(c => c.id === currentConversationId);
+
+  // 新しいチャットを開始
+  const startNewChat = () => {
+    setCurrentConversationId(null);
+    setMessages([]);
+    setInput('');
+    setError(null);
+  };
+
+  // 会話を選択
+  const selectConversation = (id: string) => {
+    const conversation = conversations.find(c => c.id === id);
+    if (conversation) {
+      setCurrentConversationId(id);
+      setMessages(conversation.messages);
+      setError(null);
+    }
+  };
+
+  // 会話を削除
+  const deleteConversation = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConversations(prev => prev.filter(c => c.id !== id));
+    if (currentConversationId === id) {
+      startNewChat();
+    }
+  };
+
+  // 会話を更新
+  const updateConversation = (id: string, updatedMessages: Message[]) => {
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === id) {
+        // タイトルを最初のユーザーメッセージから生成
+        const firstUserMessage = updatedMessages.find(m => m.role === 'user');
+        const title = firstUserMessage 
+          ? firstUserMessage.content.substring(0, 30) 
+          : conv.title;
+        return {
+          ...conv,
+          messages: updatedMessages,
+          title,
+          updatedAt: Date.now(),
+        };
+      }
+      return conv;
+    }));
+  };
 
   useEffect(() => {
     setIsMac(typeof navigator !== 'undefined' && navigator.platform.includes('Mac'));
@@ -44,13 +127,35 @@ export default function ChatInterface() {
     
     if (!input.trim() || isLoading) return;
 
+    // 新しい会話の場合は作成
+    let conversationId = currentConversationId;
+    if (!conversationId) {
+      conversationId = Date.now().toString();
+      const newConversation: Conversation = {
+        id: conversationId,
+        title: input.trim().substring(0, 30) || '新しいチャット',
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setConversations(prev => [newConversation, ...prev]);
+      setCurrentConversationId(conversationId);
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
       content: input.trim(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => {
+      const updated = [...prev, userMessage];
+      // 会話履歴を更新
+      if (conversationId) {
+        updateConversation(conversationId, updated);
+      }
+      return updated;
+    });
     setInput('');
     setIsLoading(true);
     setError(null);
@@ -127,7 +232,14 @@ export default function ChatInterface() {
               role: 'assistant',
               content: accumulatedContent.trim(),
             };
-            setMessages((prev) => [...prev, assistantMessage]);
+            setMessages((prev) => {
+              const updated = [...prev, assistantMessage];
+              // 会話履歴を更新
+              if (conversationId) {
+                updateConversation(conversationId, updated);
+              }
+              return updated;
+            });
           }
           setStreamingContent('');
           setIsLoading(false);
@@ -147,7 +259,14 @@ export default function ChatInterface() {
                   role: 'assistant',
                   content: accumulatedContent.trim(),
                 };
-                setMessages((prev) => [...prev, assistantMessage]);
+                setMessages((prev) => {
+                  const updated = [...prev, assistantMessage];
+                  // 会話履歴を更新
+                  if (conversationId) {
+                    updateConversation(conversationId, updated);
+                  }
+                  return updated;
+                });
               }
               setStreamingContent('');
               setIsLoading(false);
@@ -167,7 +286,14 @@ export default function ChatInterface() {
                     role: 'assistant',
                     content: finalContent.trim(),
                   };
-                  setMessages((prev) => [...prev, assistantMessage]);
+                  setMessages((prev) => {
+                    const updated = [...prev, assistantMessage];
+                    // 会話履歴を更新
+                    if (conversationId) {
+                      updateConversation(conversationId, updated);
+                    }
+                    return updated;
+                  });
                 }
                 setStreamingContent('');
                 setIsLoading(false);
@@ -201,11 +327,16 @@ export default function ChatInterface() {
           // 最後のメッセージが同じでない場合のみ追加
           const lastMessage = prev[prev.length - 1];
           if (!lastMessage || lastMessage.role !== 'assistant' || lastMessage.content !== accumulatedContent.trim()) {
-            return [...prev, {
+            const updated = [...prev, {
               id: Date.now().toString(),
               role: 'assistant' as const,
               content: accumulatedContent.trim(),
             }];
+            // 会話履歴を更新
+            if (conversationId) {
+              updateConversation(conversationId, updated);
+            }
+            return updated;
           }
           return prev;
         });
@@ -228,33 +359,150 @@ export default function ChatInterface() {
     // 単独のEnterキーは改行として扱う（デフォルト動作）
   };
 
-  return (
-    <div className="flex h-screen flex-col bg-gradient-to-b from-[#212121] via-[#2d2d3a] to-[#212121] text-white">
-      {/* ヘッダー */}
-      <header className="sticky top-0 z-10 border-b border-gray-700/50 bg-[#2d2d3a]/80 backdrop-blur-sm px-4 py-4 shadow-lg">
-        <div className="flex items-center gap-4">
-          <div className="relative h-20 w-auto flex-shrink-0 transition-opacity hover:opacity-80">
-            <Image
-              src="/logo.png"
-              alt="Company Logo"
-              width={360}
-              height={80}
-              className="h-full w-auto object-contain drop-shadow-lg"
-              style={{ width: 'auto', height: '100%' }}
-              priority
-            />
-          </div>
-          <div className="h-20 flex items-center border-l border-gray-600/50 pl-4">
-            <h1 className="text-xl font-extrabold text-gray-100 tracking-widest uppercase" style={{ fontFamily: 'var(--font-outfit)', letterSpacing: '0.15em' }}>
-              NITTONO専用AIツール
-            </h1>
-          </div>
-        </div>
-      </header>
+  const handleAuthSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    
+    // TODO: 認証処理を実装
+    console.log('Auth:', { mode: authMode, email, password });
+    
+    // モーダルを閉じる
+    setShowAuthModal(false);
+  };
 
-      {/* メッセージエリア */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
-        <div className="mx-auto max-w-3xl px-4 py-8">
+  // ESCキーでモーダルを閉じる
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showAuthModal) {
+        setShowAuthModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showAuthModal]);
+
+  return (
+    <div className="flex h-screen bg-gradient-to-b from-[#212121] via-[#2d2d3a] to-[#212121] text-white">
+      {/* 左側サイドバー - チャット履歴 */}
+      {sidebarOpen && (
+        <div className="w-64 flex-shrink-0 border-r border-gray-700/50 bg-[#212121] flex flex-col transition-all">
+          {/* サイドバーヘッダー */}
+          <div className="p-4 border-b border-gray-700/50">
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-700/50 transition-colors"
+                aria-label="サイドバーを閉じる"
+              >
+                <ChevronLeft className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+            <button
+              onClick={startNewChat}
+              className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-br from-[#10a37f] to-[#0d8f6e] hover:from-[#0d8f6e] hover:to-[#0a7d5c] transition-all text-white font-semibold shadow-lg"
+            >
+              <Plus className="h-5 w-5" />
+              <span>新しいチャット</span>
+            </button>
+          </div>
+
+        {/* チャット履歴リスト */}
+        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent p-2">
+          {conversations.length === 0 ? (
+            <div className="text-center text-gray-500 text-sm mt-8 px-4">
+              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>チャット履歴がありません</p>
+              <p className="text-xs mt-1">新しいチャットを開始してください</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {conversations.map((conv) => (
+                <div
+                  key={conv.id}
+                  onClick={() => selectConversation(conv.id)}
+                  className={clsx(
+                    'group relative flex items-center gap-2 p-3 rounded-lg cursor-pointer transition-all',
+                    currentConversationId === conv.id
+                      ? 'bg-[#2d2d3a] border border-[#10a37f]/50'
+                      : 'hover:bg-[#2d2d3a]/50'
+                  )}
+                >
+                  <MessageSquare className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-200 truncate">
+                      {conv.title}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {new Date(conv.updatedAt).toLocaleDateString('ja-JP', {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => deleteConversation(conv.id, e)}
+                    className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1.5 rounded hover:bg-gray-700/50 transition-opacity"
+                    aria-label="削除"
+                  >
+                    <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-400" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* サイドバーフッター */}
+        <div className="p-4 border-t border-gray-700/50">
+          <button
+            onClick={() => setShowAuthModal(true)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gray-700/50 hover:bg-gray-600/50 transition-colors text-gray-300"
+          >
+            <User className="h-5 w-5" />
+            <span>ログイン</span>
+          </button>
+        </div>
+      </div>
+      )}
+
+      {/* メインコンテンツエリア */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* ヘッダー */}
+        <header className="sticky top-0 z-10 border-b border-gray-700/50 bg-[#2d2d3a]/80 backdrop-blur-sm px-4 py-5 shadow-lg">
+          <div className="flex items-center gap-4">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-700/50 transition-colors"
+                aria-label="サイドバーを開く"
+              >
+                <Menu className="h-5 w-5 text-gray-300" />
+              </button>
+            )}
+            <div className="relative h-20 w-auto flex-shrink-0 transition-opacity hover:opacity-80">
+              <Image
+                src="/logo.png"
+                alt="Company Logo"
+                width={360}
+                height={80}
+                className="h-full w-auto object-contain drop-shadow-lg"
+                style={{ width: 'auto', height: '100%' }}
+                priority
+              />
+            </div>
+            <div className="h-20 flex items-center border-l border-gray-600/50 pl-4">
+              <h1 className="text-xl font-extrabold text-gray-100 tracking-widest uppercase" style={{ fontFamily: 'var(--font-outfit)', letterSpacing: '0.15em' }}>
+                NITTONO専用AIツール
+              </h1>
+            </div>
+          </div>
+        </header>
+
+        {/* メッセージエリア */}
+        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+          <div className="mx-auto max-w-3xl px-4 py-8">
           {messages.length === 0 && !isLoading && (
             <div className="flex h-full min-h-[60vh] items-center justify-center">
               <div className="text-center text-gray-400 animate-fade-in">
@@ -385,13 +633,13 @@ export default function ChatInterface() {
             </div>
           )}
 
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </div>
         </div>
-      </div>
 
-      {/* 入力エリア */}
-      <div className="sticky bottom-0 border-t border-gray-700/50 bg-[#2d2d3a]/80 backdrop-blur-sm px-4 py-5 shadow-2xl">
-        <div className="mx-auto max-w-3xl">
+        {/* 入力エリア */}
+        <div className="sticky bottom-0 border-t border-gray-700/50 bg-[#2d2d3a]/80 backdrop-blur-sm px-4 py-5 shadow-2xl">
+          <div className="mx-auto max-w-3xl">
           <form onSubmit={handleSubmit} className="relative">
             <div className="relative rounded-2xl border border-gray-600/50 bg-[#40414f] shadow-lg transition-all focus-within:border-[#10a37f]/50 focus-within:ring-2 focus-within:ring-[#10a37f]/20">
               <textarea
@@ -435,8 +683,116 @@ export default function ChatInterface() {
               <span>送信</span>
             </span>
           </p>
+          </div>
         </div>
       </div>
+
+      {/* 認証モーダル（グローバル） */}
+      {showAuthModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAuthModal(false);
+            }
+          }}
+        >
+          <div className="relative w-full max-w-md rounded-2xl bg-[#2d2d3a] border border-gray-700/50 shadow-2xl p-6 animate-fade-in">
+            <button
+              onClick={() => setShowAuthModal(false)}
+              className="absolute top-4 right-4 rounded-full p-2 hover:bg-gray-700/50 transition-colors"
+              aria-label="閉じる"
+            >
+              <X className="h-5 w-5 text-gray-400" />
+            </button>
+            
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {authMode === 'login' ? 'ログイン' : '新規登録'}
+              </h2>
+              <p className="text-gray-400 text-sm">
+                {authMode === 'login' 
+                  ? 'アカウントにログインしてください' 
+                  : '新しいアカウントを作成してください'}
+              </p>
+            </div>
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+                  メールアドレス
+                </label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  required
+                  className="w-full rounded-lg border border-gray-600 bg-[#40414f] px-4 py-3 text-white placeholder-gray-400 focus:border-[#10a37f] focus:outline-none focus:ring-2 focus:ring-[#10a37f]/20"
+                  placeholder="example@example.com"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
+                  パスワード
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  required
+                  minLength={6}
+                  className="w-full rounded-lg border border-gray-600 bg-[#40414f] px-4 py-3 text-white placeholder-gray-400 focus:border-[#10a37f] focus:outline-none focus:ring-2 focus:ring-[#10a37f]/20"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              {authMode === 'signup' && (
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
+                    パスワード（確認）
+                  </label>
+                  <input
+                    type="password"
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    required
+                    minLength={6}
+                    className="w-full rounded-lg border border-gray-600 bg-[#40414f] px-4 py-3 text-white placeholder-gray-400 focus:border-[#10a37f] focus:outline-none focus:ring-2 focus:ring-[#10a37f]/20"
+                    placeholder="••••••••"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-gradient-to-br from-[#10a37f] to-[#0d8f6e] px-4 py-3 font-semibold text-white hover:from-[#0d8f6e] hover:to-[#0a7d5c] transition-all shadow-lg"
+              >
+                {authMode === 'login' ? 'ログイン' : '新規登録'}
+              </button>
+            </form>
+
+            <div className="mt-6 pt-6 border-t border-gray-700/50">
+              <button
+                onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                className="w-full text-center text-sm text-gray-400 hover:text-[#10a37f] transition-colors"
+              >
+                {authMode === 'login' ? (
+                  <>
+                    アカウントをお持ちでない方は{' '}
+                    <span className="font-semibold text-[#10a37f]">新規登録</span>
+                  </>
+                ) : (
+                  <>
+                    既にアカウントをお持ちの方は{' '}
+                    <span className="font-semibold text-[#10a37f]">ログイン</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
