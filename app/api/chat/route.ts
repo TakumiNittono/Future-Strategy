@@ -36,32 +36,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Dify APIにリクエストを送信
+    // チャットフローアプリの場合は /v1/chat-messages エンドポイントを使用
+    // チャットフローアプリでは inputs パラメータが必要な場合があります
     const requestBody: {
-      inputs: Record<string, any>;
       query: string;
+      inputs?: Record<string, any>;
       response_mode: string;
       user: string;
       conversation_id?: string;
     } = {
-      inputs: {},
       query: lastMessage.content,
+      // チャットフローアプリでは inputs パラメータが必要
+      // 一般的には query を inputs にも含める
+      inputs: {
+        query: lastMessage.content,
+      },
       response_mode: 'streaming',
       user: user || 'user-123',
     };
     
-    // 会話IDがある場合は追加（新規会話の場合は省略）
-    // 必要に応じて、会話を続ける場合はconversation_idを追加
-
+    // チャットアプリのエンドポイント
+    const apiUrl = 'https://api.dify.ai/v1/chat-messages';
+    
     console.log('Dify API Request:', {
-      url: 'https://api.dify.ai/v1/chat-messages',
+      url: apiUrl,
       method: 'POST',
       hasApiKey: !!apiKey,
       apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'none',
       body: requestBody,
     });
 
-    const response = await fetch('https://api.dify.ai/v1/chat-messages', {
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -75,13 +80,18 @@ export async function POST(request: NextRequest) {
       let errorJson = null;
       try {
         errorText = await response.text();
-        try {
-          errorJson = JSON.parse(errorText);
-        } catch (e) {
-          // JSONではない場合はそのまま使用
+        console.log('Dify API error response (raw):', errorText);
+        if (errorText) {
+          try {
+            errorJson = JSON.parse(errorText);
+          } catch (e) {
+            // JSONではない場合はそのまま使用
+            console.log('Error response is not JSON');
+          }
         }
       } catch (e) {
-        errorText = `Failed to read error response: ${e}`;
+        errorText = `Failed to read error response: ${e instanceof Error ? e.message : String(e)}`;
+        console.error('Failed to read error response:', e);
       }
       
       console.error('Dify API error:', {
@@ -89,14 +99,17 @@ export async function POST(request: NextRequest) {
         statusText: response.statusText,
         errorText,
         errorJson,
+        headers: Object.fromEntries(response.headers.entries()),
       });
       
-      const errorMessage = errorJson?.message || errorJson?.error || errorText || `HTTP ${response.status}: ${response.statusText}`;
+      const errorMessage = errorJson?.message || errorJson?.error || errorJson?.detail || errorText || `HTTP ${response.status}: ${response.statusText}`;
       return NextResponse.json(
         { 
           error: 'Failed to fetch from Dify API', 
-          details: errorMessage,
+          message: errorMessage,
+          details: errorJson || errorText,
           status: response.status,
+          statusText: response.statusText,
         },
         { status: response.status }
       );
@@ -136,38 +149,32 @@ export async function POST(request: NextRequest) {
                 try {
                   const parsed = JSON.parse(data);
                   
-                  // Difyのストリーミング形式に応じて処理
+                  // チャットアプリのストリーミング形式に応じて処理
                   if (parsed.event === 'message') {
-                    // メッセージチャンクの場合、answerフィールドには累積テキストが含まれる
+                    // メッセージイベント - answerフィールドに累積テキストが含まれる
                     const answer = parsed.answer || '';
                     if (answer) {
-                      // 各チャンクで累積テキストを送信（クライアント側で最新のものを保持）
                       controller.enqueue(
                         new TextEncoder().encode(`data: ${JSON.stringify({ content: answer })}\n\n`)
                       );
                     }
                   } else if (parsed.event === 'message_end') {
-                    // メッセージ終了時、最終的なanswerを確実に送信してからストリーミング終了
+                    // メッセージ終了時
                     const finalAnswer = parsed.answer || '';
-                    // 最終メッセージを確実に送信（contentとdoneを一緒に送信）
                     if (finalAnswer) {
                       controller.enqueue(
                         new TextEncoder().encode(`data: ${JSON.stringify({ content: finalAnswer, done: true })}\n\n`)
                       );
                     } else {
-                      // answerがない場合はdoneだけ送信
                       controller.enqueue(
                         new TextEncoder().encode(`data: ${JSON.stringify({ done: true })}\n\n`)
                       );
                     }
                     controller.close();
                     return;
-                  } else if (parsed.event === 'message_file') {
-                    // ファイル添付の場合はスキップ
-                    continue;
                   } else if (parsed.event === 'error') {
                     // エラーイベントの場合
-                    const errorMsg = parsed.message || 'Unknown error';
+                    const errorMsg = parsed.message || parsed.answer || 'Unknown error';
                     controller.enqueue(
                       new TextEncoder().encode(`data: ${JSON.stringify({ error: errorMsg, done: true })}\n\n`)
                     );

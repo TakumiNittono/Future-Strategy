@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
 import Image from 'next/image';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Send, Bot, User, LogIn, UserPlus, X, MessageSquare, Plus, Trash2, Menu, ChevronLeft, Paperclip, File, ArrowUp, Mic } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -182,37 +183,77 @@ export default function ChatInterface() {
       });
 
       if (!response.ok) {
-        let errorMessage = 'Failed to send message';
+        // レスポンス情報を先に取得（response.text()を呼ぶ前に）
+        const status = response.status;
+        const statusText = response.statusText;
+        const responseUrl = response.url;
+        
+        let errorMessage = `HTTP ${status}: ${statusText || 'Unknown error'}`;
         let errorDetails = '';
+        let errorData = null;
+        
         try {
           const errorText = await response.text();
-          errorDetails = errorText;
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.error || errorData.message || errorData.details || errorMessage;
-            if (errorData.details) {
-              errorDetails = typeof errorData.details === 'string' ? errorData.details : JSON.stringify(errorData.details);
+          console.log('[DEBUG] Error response text:', errorText);
+          console.log('[DEBUG] Response status:', status);
+          console.log('[DEBUG] Response statusText:', statusText);
+          
+          if (errorText && errorText.trim()) {
+            errorDetails = errorText;
+            try {
+              errorData = JSON.parse(errorText);
+              console.log('[DEBUG] Parsed error data:', errorData);
+              errorMessage = errorData.error || errorData.message || errorData.details || errorMessage;
+              if (errorData.details) {
+                errorDetails = typeof errorData.details === 'string' 
+                  ? errorData.details 
+                  : JSON.stringify(errorData.details, null, 2);
+              } else if (errorData.message) {
+                errorDetails = errorData.message;
+              }
+            } catch (e) {
+              // JSONではない場合はそのまま使用
+              console.log('[DEBUG] Error text is not JSON, using as-is');
+              errorMessage = errorText;
+              errorDetails = errorText;
             }
-          } catch (e) {
-            // JSONではない場合はそのまま使用
-            errorMessage = errorText || `HTTP ${response.status}: ${response.statusText}`;
+          } else {
+            // レスポンスボディが空の場合
+            errorMessage = `HTTP ${status}: ${statusText || 'Unknown error'}`;
+            errorDetails = `サーバーからエラーレスポンスが返されましたが、詳細情報がありません。`;
           }
         } catch (e) {
-          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+          console.error('[DEBUG] Error reading response:', e);
+          errorMessage = `HTTP ${status}: ${statusText || 'Unknown error'}`;
+          errorDetails = e instanceof Error ? e.message : String(e);
         }
         
-        const fullErrorMessage = errorDetails 
+        // エラーメッセージが空の場合はフォールバック
+        if (!errorMessage || errorMessage.trim() === '') {
+          errorMessage = `HTTP ${status}: ${statusText || 'Unknown error'}`;
+        }
+        
+        const fullErrorMessage = errorDetails && errorDetails.trim()
           ? `${errorMessage}\n\n詳細: ${errorDetails}`
           : errorMessage;
         
-        console.error('API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorMessage,
-          errorDetails,
-        });
+        // デバッグ用のログ
+        const errorLogObject = {
+          status: status,
+          statusText: statusText || '(empty)',
+          errorMessage: errorMessage || '(empty)',
+          errorDetails: errorDetails || '(empty)',
+          errorData: errorData || '(null)',
+          url: responseUrl || '(empty)',
+        };
         
-        throw new Error(fullErrorMessage);
+        console.error('[DEBUG] API Error Details:', errorLogObject);
+        console.error('[DEBUG] Full error message:', fullErrorMessage);
+        
+        setError(fullErrorMessage);
+        setIsLoading(false);
+        setStreamingContent('');
+        return;
       }
 
       const reader = response.body?.getReader();
@@ -571,17 +612,36 @@ export default function ChatInterface() {
                     ? 'bg-gradient-to-br from-[#10a37f] to-[#0d8f6e] text-white'
                     : 'bg-[#444654] text-gray-100 border border-gray-700/50'
                 )}
+                style={{ pointerEvents: 'auto' }}
               >
                 {message.role === 'user' ? (
                   <p className="whitespace-pre-wrap break-words">{message.content}</p>
                 ) : (
-                  <div className="prose prose-invert max-w-none break-words">
+                  <div className="prose prose-invert max-w-none break-words" style={{ pointerEvents: 'auto' }}>
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
-                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc">{children}</ul>,
-                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal">{children}</ol>,
-                        li: ({ children }) => <li className="mb-1">{children}</li>,
+                        p: ({ children }) => <p className="mb-2 last:mb-0" style={{ pointerEvents: 'auto' }}>{children}</p>,
+                        ul: ({ children }) => <ul className="mb-2 ml-4 list-disc" style={{ pointerEvents: 'auto' }}>{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal" style={{ pointerEvents: 'auto' }}>{children}</ol>,
+                        li: ({ children }) => <li className="mb-1" style={{ pointerEvents: 'auto' }}>{children}</li>,
+                        a: ({ href, children }) => (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#10a37f] hover:text-[#0d8f6e] underline transition-colors break-all cursor-pointer"
+                            style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (href) {
+                                window.open(href, '_blank', 'noopener,noreferrer');
+                              }
+                            }}
+                          >
+                            {children}
+                          </a>
+                        ),
                       code: ({ children, className }) => {
                         const isInline = !className;
                         return isInline ? (
