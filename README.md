@@ -1,24 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dify Chat Application
 
-## Getting Started
+Dify APIを利用したChatGPT風のチャットボットUIアプリケーションです。
 
-First, run the development server:
+## 技術スタック
+
+- **Framework**: Next.js 14+ (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Icons**: lucide-react
+- **HTTP Client**: axios / fetch
+- **Markdown Rendering**: react-markdown
+
+## セットアップ
+
+### 1. 依存関係のインストール
+
+```bash
+npm install
+```
+
+### 2. 環境変数の設定
+
+`.env.local.example` を `.env.local` にコピーし、Dify API Keyを設定してください：
+
+```bash
+cp .env.local.example .env.local
+```
+
+`.env.local` ファイルを編集：
+
+```env
+DIFY_API_KEY=your_actual_dify_api_key_here
+```
+
+Dify API Keyは、[Difyダッシュボード](https://dify.ai)から取得できます。
+
+### 3. 開発サーバーの起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで [http://localhost:3000](http://localhost:3000) を開いてアプリケーションを確認できます。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 機能
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- ✅ ChatGPT風のダークモードUI
+- ✅ ヘッダーに社内ロゴ表示
+- ✅ リアルタイムストリーミング表示
+- ✅ Markdownレンダリング対応
+- ✅ Enterキーで改行、Ctrl/Cmd+Enterで送信
+- ✅ 自動スクロール
+- ✅ エラーハンドリング
+
+## プロジェクト構造
+
+```
+my-dify-chat/
+├── app/
+│   ├── api/
+│   │   └── chat/
+│   │       └── route.ts          # Dify APIプロキシ（BFFパターン）
+│   ├── page.tsx                   # メインページ
+│   └── layout.tsx                 # ルートレイアウト
+├── components/
+│   └── ChatInterface.tsx          # チャットUIコンポーネント
+├── public/
+│   └── logo.png                   # 社内ロゴ
+└── .env.local                     # 環境変数（要作成）
+```
+
+## 使用方法
+
+1. メッセージを入力エリアに入力
+2. **Enterキー**: 改行
+3. **Ctrl+Enter (Mac: Cmd+Enter)**: メッセージを送信
+4. AIの回答がストリーミング形式で表示されます
 
 ## Learn More
 
