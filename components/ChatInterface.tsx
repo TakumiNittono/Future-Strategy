@@ -374,7 +374,7 @@ export default function ChatInterface() {
 
   // ESCキーでモーダルを閉じる
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+    const handleEscape = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape' && showAuthModal) {
         setShowAuthModal(false);
       }
